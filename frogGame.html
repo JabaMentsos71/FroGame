@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Жабий Охотник: Legacy - TOTAL EDITION</title>
+    <style>
+        :root { --swamp: #7eb344; --water: #2c5d63; --lily: #a4de02; --gold: #ffd700; --boss: #ff4444; }
+        
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: #1a1a1a; 
+            font-family: 'Segoe UI', sans-serif; 
+            cursor: crosshair;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #game-container {
+            width: 1000px; height: 700px; margin: 10px auto; position: relative;
+            background: linear-gradient(to bottom, #87CEEB, #E0F7FA);
+            border: 8px solid var(--water); border-radius: 20px; overflow: hidden;
+            transition: background 2s, filter 2s;
+            outline: none !important;
+        }
+
+        #game-container * {
+            user-select: none;
+            -webkit-user-drag: none;
+            outline: none;
+        }
+        
+        /* СЛОИ ПОГОДЫ */
+        .weather-layer {
+            position: absolute; inset: 0; pointer-events: none; z-index: 800;
+            opacity: 0; transition: opacity 1.5s, background 2s;
+        }
+        #rain { 
+            background: repeating-linear-gradient(transparent, transparent 90%, rgba(255,255,255,0.2) 100%),
+                        linear-gradient(80deg, transparent 40%, rgba(255,255,255,0.1) 50%, transparent 60%);
+            background-size: 100% 40px, 80px 100%;
+            animation: rain-anim 0.3s linear infinite;
+        }
+        #snow {
+            background: radial-gradient(circle at center, white 1px, transparent 2px);
+            background-size: 50px 50px;
+            animation: snow-anim 3s linear infinite;
+        }
+        #acid { background: rgba(164, 222, 2, 0.2); mix-blend-mode: color-burn; }
+        #storm { background: rgba(0, 0, 0, 0.3); animation: lightning 5s infinite; }
+        #fog { background: rgba(255,255,255,0.3); backdrop-filter: blur(3px); }
+        #night-overlay { background: rgba(0,0,30,0.6); mix-blend-mode: multiply; }
+        #sun-glare { background: radial-gradient(circle at 20% 20%, rgba(255,255,200,0.4) 0%, transparent 60%); }
+        
+        @keyframes rain-anim { from { background-position: 0 0; } to { background-position: 0 400px; } }
+        @keyframes snow-anim { from { background-position: 0 0; } to { background-position: 20px 500px; } }
+        @keyframes lightning { 
+            0%, 95%, 98% { background: rgba(0,0,0,0.3); }
+            96%, 99% { background: rgba(255,255,255,0.4); }
+        }
+        .active-weather { opacity: 1 !important; }
+
+        .overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.95);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; color: white; text-align: center;
+        }
+        .btn {
+            padding: 10px 25px; margin: 5px; font-size: 16px; cursor: pointer;
+            background: var(--lily); border: none; border-radius: 20px; font-weight: bold; transition: 0.2s;
+        }
+        .btn:hover { transform: scale(1.05); background: white; color: black; }
+        
+        #ach-toast {
+            position: absolute; top: 20px; right: -350px; width: 280px; 
+            background: rgba(20, 20, 20, 0.95); border: 3px solid var(--gold); border-radius: 15px;
+            padding: 15px; color: white; z-index: 2000; transition: 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #ach-toast.show { right: 20px; }
+
+        #frog { position: absolute; width: 60px; height: 60px; font-size: 50px; z-index: 100; text-align: center; line-height: 60px; transition: filter 0.3s; }
+        #frog-hat-visual { position: absolute; top: -35px; left: 0; width: 60px; text-align: center; font-size: 35px; z-index: 101; pointer-events: none; }
+        
+        #tongue { position: absolute; height: 10px; background: #ff80ab; display: none; transform-origin: left center; z-index: 50; border-radius: 5px; box-shadow: 0 0 5px #ff80ab; }
+        .platform { position: absolute; height: 25px; background: #5d4037; border-top: 5px solid #8d6e63; border-radius: 5px; z-index: 10; }
+        .ladder { position: absolute; width: 50px; background: repeating-linear-gradient(0deg, #3e2723 0 10px, transparent 10px 20px); border: 3px solid #2d1b18; z-index: 5; }
+        .fly { position: absolute; z-index: 150; font-size: 30px; pointer-events: none; }
+        
+        #boss { position: absolute; font-size: 140px; z-index: 140; pointer-events: none; display: none; line-height: 1; text-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .laser-ball { position: absolute; width: 20px; height: 20px; border-radius: 50%; z-index: 160; box-shadow: 0 0 15px currentColor; border: 2px solid white; }
+        
+        #boss-hp-bar { position: absolute; top: 50px; left: 250px; width: 500px; height: 20px; background: rgba(0,0,0,0.7); border: 3px solid white; display: none; z-index: 600; border-radius: 10px; overflow: hidden; }
+        #boss-hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ff0000, #990000); transition: 0.1s; }
+
+        #hud { position: absolute; top: 10px; width: 100%; display: flex; justify-content: space-around; font-size: 22px; z-index: 500; color: #111; font-weight: bold; pointer-events: none; }
+        .hidden { display: none !important; }
+        
+        .menu-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 400px; overflow-y: auto; padding: 20px; width: 90%; }
+        .card { background: rgba(255,255,255,0.1); padding: 10px; border-radius: 10px; border-left: 5px solid #444; text-align: left; font-size: 14px; }
+        .card.owned { border-left-color: var(--lily); background: rgba(164, 222, 2, 0.1); }
+        
+        #tut-box {
+            position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
+            background: var(--swamp); border: 4px solid white; padding: 20px;
+            border-radius: 20px; color: white; z-index: 3000; font-size: 24px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5); display: none; text-align: center;
+        }
+
+        input#player-name { 
+            padding: 15px; font-size: 20px; border-radius: 10px; border: 2px solid var(--lily); 
+            width: 250px; text-align: center; margin-bottom: 20px; background: #222; color: white; 
+        }
+        .stat-line { font-size: 18px; margin: 5px; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; width: 80%; text-align: left; }
+
+        #game-over-screen {
+            background: linear-gradient(135deg, #1b3022 0%, #000 100%);
+            border: 10px double var(--lily);
+        }
+        .over-swamp-text { color: var(--lily); text-shadow: 0 0 10px var(--lily); font-size: 50px; margin: 0; }
+        .result-box { background: rgba(126, 179, 68, 0.1); padding: 20px; border-radius: 20px; margin: 20px; border: 1px dashed var(--lily); }
+    </style>
+</head>
+<body oncontextmenu="return false;"> 
+<div id="game-container">
+    <div id="rain" class="weather-layer"></div>
+    <div id="snow" class="weather-layer"></div>
+    <div id="acid" class="weather-layer"></div>
+    <div id="storm" class="weather-layer"></div>
+    <div id="fog" class="weather-layer"></div>
+    <div id="night-overlay" class="weather-layer"></div>
+    <div id="sun-glare" class="weather-layer"></div>
+
+    <div id="boss-hp-bar"><div id="boss-hp-fill"></div></div>
+    <div id="boss"></div>
+    
+    <div id="ach-toast">
+        <div style="color: var(--gold); font-weight: bold; font-size: 12px;">🏆 ДОСТИЖЕНИЕ!</div>
+        <div id="ach-toast-title" style="font-size: 18px; font-weight: bold; margin: 5px 0;"></div>
+        <div id="ach-toast-desc" style="font-size: 13px; color: #bbb;"></div>
+    </div>
+
+    <div id="tut-box"></div>
+
+    <div id="name-screen" class="overlay">
+        <h1 style="color:var(--lily); margin-bottom: 10px;"> ЖАБИЙ ОХОТНИК</h1>
+        <div style="font-size: 50px; margin-bottom: 20px;">🕷️🕸️</div>
+        <p style="color: #aaa; margin-bottom: 20px;">Как тебя зовут, герой болота?</p>
+        <input type="text" id="player-name" placeholder="Твоё имя..." maxlength="12">
+        <button class="btn" onclick="login()">ВОЙТИ</button>
+    </div>
+
+    <div id="tut-choice-screen" class="overlay hidden">
+        <h2 style="color:var(--lily);">ТЫ ЗДЕСЬ ВПЕРВЫЕ?</h2>
+        <p>Хочешь пройти краткое обучение?</p>
+        <div style="display:flex;">
+            <button class="btn" onclick="startTutorialFlow(true)" style="background: var(--lily);">ДА, ДАВАЙ!</button>
+            <button class="btn" onclick="startTutorialFlow(false)" style="background: #ff5252;">НЕТ, Я ПРОФИ</button>
+        </div>
+    </div>
+
+    <div id="main-menu" class="overlay hidden">
+        <div id="user-info" style="position: absolute; top: 20px; left: 20px; color: var(--lily); font-weight: bold;">ИГРОК: <span id="current-user-display">---</span></div>
+        <h2 id="welcome-msg" style="color:var(--lily); font-size: 40px; margin-top: 0;"></h2>
+        <div id="menu-content" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+            <button class="btn" onclick="startGame()">▶ НАЧАТЬ ОХОТУ</button>
+            <button class="btn" onclick="showShop()">🛒 МАГАЗИН СКИНОВ</button>
+            <button class="btn" onclick="showRecords()">📊 РЕКОРДЫ</button>
+            <button class="btn" onclick="showAchievements()">🏆 ДОСТИЖЕНИЯ</button>
+            <button class="btn" onclick="showAuthors()">👥 АВТОРЫ</button>
+            <button class="btn" onclick="logout()" style="background:#ff5252; margin-top: 20px;">СМЕНИТЬ АККАУНТ</button>
+        </div>
+        <div style="margin-top:20px; font-size: 20px; color: var(--gold);">💰 БАЛАНС: <span class="gold-count">0</span></div>
+    </div>
+
+    <div id="game-over-screen" class="overlay hidden">
+        <h1 class="over-swamp-text">КВА-НЕЦ ИГРЫ!</h1>
+        <div style="font-size: 60px;">💀🐸</div>
+        <div class="result-box">
+            <div style="font-size: 24px; color: var(--gold); margin-bottom: 10px;">РЕЗУЛЬТАТЫ ЗАБЕГА:</div>
+            <div id="final-stats" style="color: white; line-height: 1.6;"></div>
+        </div>
+        <button class="btn" onclick="showMainMenu()">В ГЛАВНОЕ МЕНЮ</button>
+    </div>
+
+    <div id="hud" class="hidden">
+        <div>💰 <span id="coins">0</span></div>
+        <div>❤️ <span id="lives">❤️❤️❤️</span></div>
+        <div>🦟 <span id="kills">0</span></div>
+        <div>⏱️ <span id="timer">00:00</span></div>
+        <div id="weather-status" style="color: #444;">☀️ Ясно</div>
+    </div>
+
+    <div id="world">
+        <div id="frog" style="left: 100px; top: 600px;">
+            <div id="frog-hat-visual"></div>
+            <span>🐸</span>
+        </div>
+        <div id="tongue"></div>
+        <div class="platform" style="bottom: 0px; left: 0px; width: 1000px; height: 40px;"></div>
+        <div class="platform" style="bottom: 160px; left: 50px; width: 350px;"></div>
+        <div class="ladder" style="bottom: 40px; left: 100px; height: 125px;"></div>
+        <div class="platform" style="bottom: 320px; left: 550px; width: 400px;"></div>
+        <div class="ladder" style="bottom: 160px; left: 850px; height: 165px;"></div>
+        <div class="platform" style="bottom: 480px; left: 100px; width: 450px;"></div>
+        <div class="ladder" style="bottom: 320px; left: 200px; height: 165px;"></div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('selectstart', e => e.preventDefault());
+
+let db = JSON.parse(localStorage.getItem('frog_v20_save')) || {};
+let currentNick = localStorage.getItem('frog_last_user') || "";
+let myData = null;
+
+const BOSS_VARIATIONS = [
+    { icon: '🐞', name: 'Леди Бум', hp: 50, color: '#ff4444' },
+    { icon: '🦋', name: 'Махаон', hp: 40, color: '#ff00ff' },
+    { icon: '🐝', name: 'Би-Ззз', hp: 45, color: '#ffd700' },
+    { icon: '🕷️', name: 'Арагог', hp: 70, color: '#555555' },
+    { icon: '🦟', name: 'Кровопийца', hp: 35, color: '#aa0000' }
+];
+
+const SKINS = [
+    { id: 'default', name: 'Обычная', cost: 0, filter: 'none' },
+    { id: 'forest', name: 'Лесная', cost: 900, filter: 'hue-rotate(45deg) brightness(1.2)' },
+    { id: 'poison', name: 'Ядовитая', cost: 2250, filter: 'hue-rotate(140deg) saturate(3)' },
+    { id: 'night', name: 'Ночная', cost: 3600, filter: 'brightness(0.5) contrast(1.5)' },
+    { id: 'ghost', name: 'Призрак', cost: 5400, filter: 'opacity(0.5) invert(1)' },
+    { id: 'gold', name: 'Золотая', cost: 9000, filter: 'sepia(1) saturate(20) brightness(1.2)' }
+];
+
+const HATS = [
+    { id: 'bear', icon: '🐻', name: 'Мишка', cost: 500 },
+    { id: 'fox', icon: '🦊', name: 'Лиса', cost: 800 },
+    { id: 'panda', icon: '🐼', name: 'Панда', cost: 1000 },
+    { id: 'koala', icon: '🐨', name: 'Коала', cost: 1200 },
+    { id: 'tiger', icon: '🐯', name: 'Тигр', cost: 1500 },
+    { id: 'lion', icon: '🦁', name: 'Лев', cost: 2000 },
+    { id: 'cow', icon: '🐮', name: 'Коровка', cost: 2200 },
+    { id: 'pig', icon: '🐷', name: 'Хрюша', cost: 2500 },
+    { id: 'monkey', icon: '🐵', name: 'Обезьянка', cost: 3000 },
+    { id: 'bunny', icon: '🐰', name: 'Зайка', cost: 3500 },
+    { id: 'wolf', icon: '🐺', name: 'Волк', cost: 4000 },
+    { id: 'hamster', icon: '🐹', name: 'Хомяк', cost: 5000 },
+    { id: 'chicken', icon: '🐔', name: 'Цыпленок', cost: 7000 },
+    { id: 'unicorn', icon: '🦄', name: 'Единорог', cost: 10000 },
+    { id: 'cat_black', icon: '🐈‍⬛', name: 'Черная Кошка', cost: 15000 }
+];
+
+// 35 УНИКАЛЬНЫХ ДОСТИЖЕНИЙ
+const ALL_ACHIEVEMENTS = [
+    // ПО КИЛЛАМ (7)
+    { id: 'k1', title: 'Первая кровь', desc: 'Убить 1 врага', check: d => d.totalKills >= 1 },
+    { id: 'k50', title: 'Охотник', desc: 'Убить 50 врагов', check: d => d.totalKills >= 50 },
+    { id: 'k250', title: 'Гроза мошкары', desc: 'Убить 250 врагов', check: d => d.totalKills >= 250 },
+    { id: 'k500', title: 'Геноцид насекомых', desc: 'Убить 500 врагов', check: d => d.totalKills >= 500 },
+    { id: 'k1000', title: 'Верховный хищник', desc: 'Убить 1000 врагов', check: d => d.totalKills >= 1000 },
+    { id: 'k2500', title: 'Легенда болота', desc: 'Убить 2500 врагов', check: d => d.totalKills >= 2500 },
+    { id: 'k5000', title: 'Убийца богов', desc: 'Убить 5000 врагов', check: d => d.totalKills >= 5000 },
+
+    // ПО ДЕНЬГАМ (7)
+    { id: 'm100', title: 'На семечки', desc: 'Собрать 100 монет', check: d => d.totalCoins >= 100 },
+    { id: 'm1000', title: 'Копилка', desc: 'Собрать 1000 монет', check: d => d.totalCoins >= 1000 },
+    { id: 'm5000', title: 'Зажиточная жаба', desc: 'Собрать 5000 монет', check: d => d.totalCoins >= 5000 },
+    { id: 'm10000', title: 'Бизнес-лягушка', desc: 'Собрать 10000 монет', check: d => d.totalCoins >= 10000 },
+    { id: 'm25000', title: 'Золотая лапка', desc: 'Собрать 25000 монет', check: d => d.totalCoins >= 25000 },
+    { id: 'm50000', title: 'Богатей', desc: 'Собрать 50000 монет', check: d => d.totalCoins >= 50000 },
+    { id: 'm100000', title: 'Миллионер из трущоб', desc: 'Собрать 100000 монет', check: d => d.totalCoins >= 100000 },
+
+    // ПО БОССАМ (7)
+    { id: 'b1', title: 'Новичок', desc: 'Победить 1 босса', check: d => d.bossKills >= 1 },
+    { id: 'b5', title: 'Боец', desc: 'Победить 5 боссов', check: d => d.bossKills >= 5 },
+    { id: 'b15', title: 'Гладиатор', desc: 'Победить 15 боссов', check: d => d.bossKills >= 15 },
+    { id: 'b30', title: 'Рыцарь болота', desc: 'Победить 30 боссов', check: d => d.bossKills >= 30 },
+    { id: 'b50', title: 'Палач', desc: 'Победить 50 боссов', check: d => d.bossKills >= 50 },
+    { id: 'b75', title: 'Титан', desc: 'Победить 75 боссов', check: d => d.bossKills >= 75 },
+    { id: 'b100', title: 'Король Боссов', desc: 'Победить 100 боссов', check: d => d.bossKills >= 100 },
+
+    // ПО ВРЕМЕНИ (7)
+    { id: 't1', title: 'Разминка', desc: 'Прожить 1 минуту', check: d => d.maxTime >= 60 },
+    { id: 't5', title: 'Выживший', desc: 'Прожить 5 минут', check: d => d.maxTime >= 300 },
+    { id: 't10', title: 'Стойкий', desc: 'Прожить 10 минут', check: d => d.maxTime >= 600 },
+    { id: 't20', title: 'Ветеран', desc: 'Прожить 20 минут', check: d => d.maxTime >= 1200 },
+    { id: 't30', title: 'Бессмертный', desc: 'Прожить 30 минут', check: d => d.maxTime >= 1800 },
+    { id: 't45', title: 'Хранитель времени', desc: 'Прожить 45 минут', check: d => d.maxTime >= 2700 },
+    { id: 't60', title: 'Вне времени', desc: 'Прожить 1 час', check: d => d.maxTime >= 3600 },
+
+    // ПО КОЛЛЕКЦИЯМ (7)
+    { id: 's1', title: 'Новый облик', desc: 'Купить 1 скин', check: d => d.ownedSkins.length >= 2 },
+    { id: 'sAll', title: 'Модник', desc: 'Собрать все скины', check: d => d.ownedSkins.length >= SKINS.length },
+    { id: 'h1', title: 'Первая шляпа', desc: 'Купить 1 шапку', check: d => d.ownedHats.length >= 1 },
+    { id: 'h5', title: 'Коллекционер шапок', desc: 'Собрать 5 шапок', check: d => d.ownedHats.length >= 5 },
+    { id: 'h15', title: 'Шляпный магнат', desc: 'Собрать все шапки', check: d => d.ownedHats.length >= HATS.length },
+    { id: 'j100', title: 'Попрыгунчик', desc: 'Прыгнуть 100 раз', check: d => d.totalJumps >= 100 },
+    { id: 'total', title: 'Перфекционист', desc: 'Выполнить все остальные условия', check: d => d.unlockedAch.length >= 34 }
+];
+
+function login() {
+    const nick = document.getElementById('player-name').value.trim();
+    if (!nick) return alert("Введите ник!");
+    currentNick = nick;
+    localStorage.setItem('frog_last_user', nick);
+    
+    if (!db[nick]) {
+        db[nick] = { 
+            totalCoins: 0, totalKills: 0, bossKills: 0, maxTime: 0, totalJumps: 0, 
+            unlockedAch: [], ownedSkins: ['default'], currentSkin: 'default',
+            ownedHats: [], currentHat: 'none', tutDone: false 
+        };
+        myData = db[nick];
+        document.getElementById('name-screen').classList.add('hidden');
+        document.getElementById('tut-choice-screen').classList.remove('hidden');
+    } else {
+        myData = db[nick];
+        // Миграция данных для новых счетчиков
+        if (myData.totalJumps === undefined) myData.totalJumps = 0;
+        document.getElementById('name-screen').classList.add('hidden');
+        showMainMenu();
+    }
+    save();
+}
+
+function startTutorialFlow(wantTut) {
+    document.getElementById('tut-choice-screen').classList.add('hidden');
+    if(wantTut) startGame(true); 
+    else { myData.tutDone = true; save(); showMainMenu(); }
+}
+
+function save() {
+    if (!currentNick) return;
+    db[currentNick] = myData;
+    localStorage.setItem('frog_v20_save', JSON.stringify(db));
+    document.querySelectorAll('.gold-count').forEach(el => el.innerText = myData.totalCoins);
+}
+
+function showMainMenu() {
+    document.querySelectorAll('.overlay').forEach(o => o.classList.add('hidden'));
+    document.getElementById('main-menu').classList.remove('hidden');
+    document.getElementById('current-user-display').innerText = currentNick.toUpperCase();
+    document.getElementById('welcome-msg').innerText = `ПРИВЕТ, ${currentNick.toUpperCase()}! 👋`;
+    applyVisuals();
+}
+
+function showShop(page = 1) {
+    let html = page === 1 ? `<h3>🛒 МАГАЗИН СКИНОВ</h3>` : `<h3>👒 МАГАЗИН ШАПОЧЕК</h3>`;
+    html += `<div class="menu-list">`;
+    if(page === 1) {
+        SKINS.forEach(s => {
+            const isOwned = myData.ownedSkins.includes(s.id);
+            html += `<div class="card ${isOwned ? 'owned' : ''}"><span style="filter:${s.filter}; font-size:30px">🐸</span> <b>${s.name}</b><br>${isOwned ? `<button class="btn" onclick="setSkin('${s.id}')">ВЫБРАТЬ</button>` : `<button class="btn" onclick="buySkin('${s.id}', ${s.cost})">${s.cost} 💰</button>`}</div>`;
+        });
+    } else {
+        html += `<div class="card ${myData.currentHat === 'none' ? 'owned' : ''}">❌ <b>Снять</b><br><button class="btn" onclick="setHat('none')">ВЫБРАТЬ</button></div>`;
+        HATS.forEach(h => {
+            const isOwned = myData.ownedHats.includes(h.id);
+            html += `<div class="card ${isOwned ? 'owned' : ''}"><span style="font-size:30px">${h.icon}</span> <b>${h.name}</b><br>${isOwned ? `<button class="btn" onclick="setHat('${h.id}')">ВЫБРАТЬ</button>` : `<button class="btn" onclick="buyHat('${h.id}', ${h.cost})">${h.cost} 💰</button>`}</div>`;
+        });
+    }
+    html += `</div>`;
+    html += page === 1 ? `<button class="btn" onclick="showShop(2)">К ШАПКАМ →</button>` : `<button class="btn" onclick="showShop(1)">← К СКИНАМ</button>`;
+    html += `<br><button class="btn" onclick="resetMenu()">Назад</button>`;
+    document.getElementById('menu-content').innerHTML = html;
+}
+
+function buySkin(id, cost) { if (myData.totalCoins >= cost) { myData.totalCoins -= cost; myData.ownedSkins.push(id); save(); showShop(1); checkAchievements(); } else alert("Мало монет!"); }
+function buyHat(id, cost) { if (myData.totalCoins >= cost) { myData.totalCoins -= cost; myData.ownedHats.push(id); save(); showShop(2); checkAchievements(); } else alert("Мало монет!"); }
+function setSkin(id) { myData.currentSkin = id; save(); applyVisuals(); showShop(1); }
+function setHat(id) { myData.currentHat = id; save(); applyVisuals(); showShop(2); }
+
+function applyVisuals() {
+    const s = SKINS.find(x => x.id === myData.currentSkin);
+    document.getElementById('frog').querySelector('span').style.filter = s ? s.filter : 'none';
+    const h = HATS.find(x => x.id === myData.currentHat);
+    document.getElementById('frog-hat-visual').innerText = h ? h.icon : '';
+}
+
+function resetMenu() {
+    document.getElementById('menu-content').innerHTML = `
+        <button class="btn" onclick="startGame()">▶ НАЧАТЬ ОХОТУ</button>
+        <button class="btn" onclick="showShop()">🛒 МАГАЗИН СКИНОВ</button>
+        <button class="btn" onclick="showRecords()">📊 РЕКОРДЫ</button>
+        <button class="btn" onclick="showAchievements()">🏆 ДОСТИЖЕНИЯ</button>
+        <button class="btn" onclick="showAuthors()">👥 АВТОРЫ</button>
+        <button class="btn" onclick="logout()" style="background:#ff5252; margin-top: 20px;">СМЕНИТЬ АККАУНТ</button>`;
+}
+
+function showRecords() {
+    let m = Math.floor(myData.maxTime / 60), s = myData.maxTime % 60;
+    document.getElementById('menu-content').innerHTML = `
+        <h3 style="color:var(--gold)">📊 ПОЛНАЯ СТАТИСТИКА</h3>
+        <div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+            <div class="stat-line">💰 Всего монет: ${myData.totalCoins}</div>
+            <div class="stat-line">🦟 Всего убито: ${myData.totalKills}</div>
+            <div class="stat-line">💀 Повержено боссов: ${myData.bossKills}</div>
+            <div class="stat-line">⏱️ Рекорд времени: ${m}:${s < 10 ? '0' + s : s}</div>
+            <div class="stat-line">🦘 Прыжков: ${myData.totalJumps}</div>
+        </div>
+        <button class="btn" onclick="resetMenu()">Назад</button>`;
+}
+
+function showAchievements() {
+    let html = `<h3>ТРОФЕИ (${myData.unlockedAch.length}/${ALL_ACHIEVEMENTS.length})</h3><div class="menu-list">`;
+    ALL_ACHIEVEMENTS.forEach(a => {
+        const isDone = myData.unlockedAch.includes(a.id);
+        html += `<div class="card ${isDone ? 'owned' : ''}"><b>${isDone ? '✅' : '🔒'} ${a.title}</b><br><small>${a.desc}</small></div>`;
+    });
+    html += `</div><button class="btn" onclick="resetMenu()">Назад</button>`;
+    document.getElementById('menu-content').innerHTML = html;
+}
+
+function showAuthors() {
+    document.getElementById('menu-content').innerHTML = `<h3>АВТОРЫ</h3><p>Идея: <b>Никита.А.В.</b></p><button class="btn" onclick="resetMenu()">Назад</button>`;
+}
+
+function logout() { localStorage.removeItem('frog_last_user'); location.reload(); }
+
+const PHYSICS = { speed: 5, jump: -15, gravity: 0.8 };
+let game = { active: false, x: 100, y: 600, vx: 0, vy: 0, isGrounded: false, lives: 3, currentCoins: 0, kills: 0, seconds: 0, spawnCount: 1, keys: {}, isTut: false, 
+             boss: { active: false, hp: 0, maxHp: 0, x: 400, y: 100, angle: 0, level: 0, color: 'red' } };
+
+function startGame(isTut = false) {
+    game = { active: true, x: 100, y: 600, vx: 0, vy: 0, isGrounded: false, lives: 3, currentCoins: 0, kills: 0, seconds: 0, spawnCount: 1, keys: {}, isTut: isTut,
+             boss: { active: false, hp: 0, maxHp: 0, x: 400, y: 100, angle: 0, level: 0, color: 'red' } };
+    
+    document.querySelectorAll('.overlay').forEach(o => o.classList.add('hidden'));
+    document.getElementById('hud').classList.remove('hidden');
+    document.getElementById('boss').style.display = 'none';
+    document.getElementById('boss-hp-bar').style.display = 'none';
+    updateHUD();
+    
+    if(isTut) runTutorial();
+    else {
+        game.timerInterval = setInterval(() => {
+            if(!game.active) return;
+            game.seconds++;
+            if(game.seconds % 60 === 0) game.spawnCount++;
+            if(game.seconds % 20 === 0) changeWeather();
+            if(game.seconds > 0 && game.seconds % 300 === 0) spawnBoss();
+            
+            updateHUD();
+            // Проверка временных достижений прямо в процессе
+            if (game.seconds > myData.maxTime) {
+                myData.maxTime = game.seconds;
+                checkAchievements();
+            }
+        }, 1000);
+        spawnEnemy();
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+function spawnBoss() {
+    if(game.boss.active) return;
+    game.boss.level++;
+    const variation = BOSS_VARIATIONS[Math.floor(Math.random() * BOSS_VARIATIONS.length)];
+    game.boss.active = true;
+    game.boss.maxHp = variation.hp + (game.boss.level * 10);
+    game.boss.hp = game.boss.maxHp;
+    game.boss.color = variation.color;
+    game.boss.x = 400;
+    game.boss.y = 100;
+    const bEl = document.getElementById('boss');
+    bEl.innerText = variation.icon;
+    bEl.style.display = 'block';
+    bEl.style.color = variation.color;
+    document.getElementById('boss-hp-bar').style.display = 'block';
+    updateBossUI();
+    game.bossShootInterval = setInterval(() => {
+        if(game.boss.active) shootLaser();
+    }, 2500 - Math.min(1000, game.boss.level * 100));
+}
+
+function shootLaser() {
+    const ball = document.createElement('div');
+    ball.className = 'laser-ball';
+    ball.style.color = game.boss.color;
+    ball.style.backgroundColor = game.boss.color;
+    const bx = game.boss.x + 70, by = game.boss.y + 70;
+    ball.style.left = bx + 'px'; ball.style.top = by + 'px';
+    document.getElementById('world').appendChild(ball);
+    const angle = Math.atan2(game.y - by, game.x - bx);
+    let curX = bx, curY = by;
+    let moveBall = setInterval(() => {
+        if(!game.active) { ball.remove(); clearInterval(moveBall); return; }
+        curX += Math.cos(angle) * 7; curY += Math.sin(angle) * 7;
+        ball.style.left = curX + 'px'; ball.style.top = curY + 'px';
+        const fr = document.getElementById('frog').getBoundingClientRect();
+        const br = ball.getBoundingClientRect();
+        if(br.left < fr.right && br.right > fr.left && br.top < fr.bottom && br.bottom > fr.top) {
+            game.lives--; updateHUD(); ball.remove(); clearInterval(moveBall);
+            if(game.lives <= 0) endGame();
+        }
+        if(curX < -100 || curX > 1100 || curY < -100 || curY > 800) { ball.remove(); clearInterval(moveBall); }
+    }, 20);
+}
+
+function updateBossUI() {
+    const fill = document.getElementById('boss-hp-fill');
+    fill.style.width = (game.boss.hp / game.boss.maxHp) * 100 + '%';
+    if(game.boss.hp <= 0) {
+        game.boss.active = false;
+        myData.bossKills++;
+        game.currentCoins += 500;
+        document.getElementById('boss').style.display = 'none';
+        document.getElementById('boss-hp-bar').style.display = 'none';
+        clearInterval(game.bossShootInterval);
+        save();
+        checkAchievements();
+    }
+}
+
+function changeWeather() {
+    const layers = ['sun-glare', 'rain', 'fog', 'night-overlay', 'snow', 'acid', 'storm'];
+    const names = { 'sun-glare': '☀️ Солнечно', 'rain': '🌧️ Дождь', 'fog': '🌫️ Туман', 'night-overlay': '🌙 Ночь', 'snow': '❄️ Снегопад', 'acid': '🧪 Кислотный дождь', 'storm': '⚡ Гроза' };
+    document.querySelectorAll('.weather-layer').forEach(l => l.classList.remove('active-weather'));
+    const randomType = layers[Math.floor(Math.random() * layers.length)];
+    document.getElementById(randomType).classList.add('active-weather');
+    document.getElementById('weather-status').innerText = names[randomType];
+}
+
+async function runTutorial() {
+    const box = document.getElementById('tut-box'); box.style.display = 'block';
+    const steps = ["Используй 'A' и 'D' для движения.", "Нажми 'W' или 'Space' для прыжка.", "Кликай мышкой, чтобы есть насекомых!"];
+    box.innerText = steps[0];
+    while(!(game.keys['KeyA'] || game.keys['KeyD'])) await new Promise(r => setTimeout(r, 100));
+    box.innerText = steps[1];
+    while(!(game.keys['KeyW'] || game.keys['Space'])) await new Promise(r => setTimeout(r, 100));
+    box.innerText = steps[2];
+    let clicked = false;
+    const det = () => clicked = true; window.addEventListener('mousedown', det);
+    while(!clicked) await new Promise(r => setTimeout(r, 100));
+    window.removeEventListener('mousedown', det);
+    box.style.display = 'none'; endGame(true);
+}
+
+function gameLoop() {
+    if(!game.active) return;
+    game.vx = 0;
+    if(game.keys['KeyA'] || game.keys['ArrowLeft']) { game.vx = -PHYSICS.speed; document.getElementById('frog').style.transform = 'scaleX(-1)'; }
+    else if(game.keys['KeyD'] || game.keys['ArrowRight']) { game.vx = PHYSICS.speed; document.getElementById('frog').style.transform = 'scaleX(1)'; }
+    
+    let onLadder = false;
+    const fr = document.getElementById('frog').getBoundingClientRect();
+    const container = document.getElementById('game-container').getBoundingClientRect();
+    document.querySelectorAll('.ladder').forEach(l => {
+        const lr = l.getBoundingClientRect();
+        if(fr.right > lr.left && fr.left < lr.right && fr.bottom > lr.top && fr.top < lr.bottom) onLadder = true;
+    });
+
+    if(onLadder) {
+        game.vy = 0;
+        if(game.keys['KeyW'] || game.keys['ArrowUp']) game.vy = -PHYSICS.speed;
+        if(game.keys['KeyS'] || game.keys['ArrowDown']) game.vy = PHYSICS.speed;
+    } else {
+        game.vy += PHYSICS.gravity;
+        if((game.keys['Space'] || game.keys['KeyW'] || game.keys['ArrowUp']) && game.isGrounded) { 
+            game.vy = PHYSICS.jump; 
+            game.isGrounded = false; 
+            myData.totalJumps++; 
+            checkAchievements();
+        }
+    }
+    game.x += game.vx; game.y += game.vy;
+    if(game.x < 0) game.x = 0; if(game.x > 940) game.x = 940;
+    
+    game.isGrounded = false;
+    document.querySelectorAll('.platform').forEach(p => {
+        const pr = p.getBoundingClientRect();
+        const pTop = pr.top - container.top;
+        if(game.x + 50 > pr.left - container.left && game.x < pr.right - container.left && game.y + 60 >= pTop && game.y + 60 <= pTop + 25 && game.vy >= 0) {
+            game.y = pTop - 60; game.vy = 0; game.isGrounded = true;
+        }
+    });
+
+    if(game.boss.active) {
+        game.boss.angle += 0.02;
+        game.boss.x = 400 + Math.sin(game.boss.angle) * 400;
+        game.boss.y = 150 + Math.cos(game.boss.angle * 0.5) * 100;
+        const bEl = document.getElementById('boss');
+        bEl.style.left = game.boss.x + 'px';
+        bEl.style.top = game.boss.y + 'px';
+    }
+
+    document.getElementById('frog').style.left = game.x + 'px';
+    document.getElementById('frog').style.top = game.y + 'px';
+    requestAnimationFrame(gameLoop);
+}
+
+function spawnEnemy() {
+    if(!game.active || game.isTut) return;
+    const bugTypes = ['🕷️', '🦟', '🐝', '🐞', '🦋']; 
+    for(let i=0; i < game.spawnCount; i++) {
+        const fly = document.createElement('div'); fly.className = 'fly'; fly.innerHTML = bugTypes[Math.floor(Math.random() * bugTypes.length)];
+        const startLeft = Math.random() > 0.5;
+        let fx = startLeft ? -50 : 1050, fy = Math.random() * 500 + 50;
+        document.getElementById('world').appendChild(fly);
+        let flyMove = setInterval(() => {
+            if(!game.active) { fly.remove(); clearInterval(flyMove); return; }
+            fx += startLeft ? 3 : -3; fly.style.left = fx + 'px'; fly.style.top = (fy + Math.sin(fx/20)*20) + 'px';
+            const fr = document.getElementById('frog').getBoundingClientRect(), flr = fly.getBoundingClientRect();
+            if(flr.left < fr.right && flr.right > fr.left && flr.top < fr.bottom && flr.bottom > fr.top) {
+                game.lives--; updateHUD(); fly.remove(); clearInterval(flyMove);
+                if(game.lives <= 0) endGame();
+            }
+            if(fx < -100 || fx > 1100) { fly.remove(); clearInterval(flyMove); }
+        }, 20);
+    }
+    setTimeout(spawnEnemy, 3500);
+}
+
+document.addEventListener('mousedown', e => {
+    if(!game.active || game.isAttacking) return;
+    game.isAttacking = true;
+    const rect = document.getElementById('game-container').getBoundingClientRect();
+    const ang = Math.atan2(e.clientY - rect.top - (game.y+30), e.clientX - rect.left - (game.x+30));
+    const t = document.getElementById('tongue'); t.style.display = 'block'; t.style.left = (game.x+30)+'px'; t.style.top = (game.y+30)+'px';
+    t.style.transform = `rotate(${ang}rad)`;
+    let l = 0;
+    let anim = setInterval(() => {
+        l += 35; t.style.width = l+'px';
+        const tx = (game.x+30) + Math.cos(ang)*l, ty = (game.y+30) + Math.sin(ang)*l;
+        if(game.boss.active) {
+            const bx = game.boss.x + 70, by = game.boss.y + 70;
+            if(Math.hypot(tx - bx, ty - by) < 80) { game.boss.hp--; updateBossUI(); l = 401; }
+        }
+        document.querySelectorAll('.fly').forEach(f => {
+            const fb = f.getBoundingClientRect(), cb = document.getElementById('game-container').getBoundingClientRect();
+            if(Math.hypot(tx-(fb.left-cb.left+15), ty-(fb.top-cb.top+15)) < 45) { f.remove(); game.currentCoins += 10; game.kills++; updateHUD(); }
+        });
+        if(l > 400) { clearInterval(anim); t.style.display='none'; game.isAttacking=false; }
+    }, 20);
+});
+
+function updateHUD() {
+    document.getElementById('coins').innerText = game.currentCoins;
+    let h = ""; for(let i=0; i<game.lives; i++) h += "❤️";
+    document.getElementById('lives').innerText = h || "💀";
+    document.getElementById('kills').innerText = game.kills;
+    let m = Math.floor(game.seconds/60), s = game.seconds%60;
+    document.getElementById('timer').innerText = `${m}:${s<10?'0'+s:s}`;
+}
+
+function checkAchievements() {
+    ALL_ACHIEVEMENTS.forEach(a => {
+        if(!myData.unlockedAch.includes(a.id) && a.check(myData)) {
+            myData.unlockedAch.push(a.id);
+            const toast = document.getElementById('ach-toast');
+            document.getElementById('ach-toast-title').innerText = a.title;
+            document.getElementById('ach-toast-desc').innerText = a.desc;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 4000);
+            save();
+        }
+    });
+}
+
+function endGame(quiet = false) {
+    game.active = false; 
+    clearInterval(game.timerInterval);
+    clearInterval(game.bossShootInterval);
+    if(!quiet) {
+        myData.totalCoins += game.currentCoins; 
+        myData.totalKills += game.kills;
+        if (game.seconds > myData.maxTime) myData.maxTime = game.seconds;
+        save();
+        checkAchievements();
+        
+        document.getElementById('final-stats').innerHTML = `
+            Убито: ${game.kills} 🦟<br>
+            Собрано: ${game.currentCoins} 💰<br>
+            Время: ${Math.floor(game.seconds/60)}:${game.seconds%60 < 10 ? '0'+game.seconds%60 : game.seconds%60} ⏱️
+        `;
+        document.getElementById('game-over-screen').classList.remove('hidden');
+    } else {
+        showMainMenu();
+    }
+}
+
+window.onkeydown = e => game.keys[e.code] = true;
+window.onkeyup = e => game.keys[e.code] = false;
+
+if(currentNick) login();
+</script>
+</body>
+</html>
